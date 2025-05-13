@@ -16,11 +16,12 @@ def flatten(input, target, ignore_index):
     input_flatten = input.view(-1, num_class)
     target_flatten = target.view(-1)
 
-    mask = (target_flatten != ignore_index)
+    mask = target_flatten != ignore_index
     input_flatten = input_flatten[mask]
     target_flatten = target_flatten[mask]
 
     return input_flatten, target_flatten
+
 
 class DiceLoss(nn.Module):
     def __init__(self, n_classes):
@@ -51,7 +52,11 @@ class DiceLoss(nn.Module):
         target = self._one_hot_encoder(target)
         if weight is None:
             weight = [1] * self.n_classes
-        assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(), target.size())
+        assert (
+            inputs.size() == target.size()
+        ), "predict {} & target {} shape do not match".format(
+            inputs.size(), target.size()
+        )
         class_wise_dice = []
         loss = 0.0
         for i in range(0, self.n_classes):
@@ -64,14 +69,15 @@ class DiceLoss(nn.Module):
 def calculate_metric_percase(pred, gt):
     pred[pred > 0] = 1
     gt[gt > 0] = 1
-    if pred.sum() > 0 and gt.sum()>0:
+    if pred.sum() > 0 and gt.sum() > 0:
         dice = metric.binary.dc(pred, gt)
         hd95 = metric.binary.hd95(pred, gt)
         return dice, hd95
-    elif pred.sum() > 0 and gt.sum()==0:
+    elif pred.sum() > 0 and gt.sum() == 0:
         return 1, 0
     else:
         return 0, 0
+
 
 class BoundaryDoULoss(nn.Module):
     def __init__(self, n_classes):
@@ -87,14 +93,26 @@ class BoundaryDoULoss(nn.Module):
         return output_tensor.float()
 
     def _adaptive_size(self, score, target):
-        kernel = torch.Tensor([[0,1,0], [1,1,1], [0,1,0]])
-        padding_out = torch.zeros((target.shape[0], target.shape[-2]+2, target.shape[-1]+2))
+        kernel = torch.Tensor([[0, 1, 0], [1, 1, 1], [0, 1, 0]])
+        padding_out = torch.zeros(
+            (target.shape[0], target.shape[-2] + 2, target.shape[-1] + 2)
+        )
         padding_out[:, 1:-1, 1:-1] = target
         h, w = 3, 3
 
-        Y = torch.zeros((padding_out.shape[0], padding_out.shape[1] - h + 1, padding_out.shape[2] - w + 1)).cuda()
+        Y = torch.zeros(
+            (
+                padding_out.shape[0],
+                padding_out.shape[1] - h + 1,
+                padding_out.shape[2] - w + 1,
+            )
+        ).cuda()
         for i in range(Y.shape[0]):
-            Y[i, :, :] = torch.conv2d(target[i].unsqueeze(0).unsqueeze(0), kernel.unsqueeze(0).unsqueeze(0).cuda(), padding=1)
+            Y[i, :, :] = torch.conv2d(
+                target[i].unsqueeze(0).unsqueeze(0),
+                kernel.unsqueeze(0).unsqueeze(0).cuda(),
+                padding=1,
+            )
         Y = Y * target
         Y[Y == 5] = 0
         C = torch.count_nonzero(Y)
@@ -106,22 +124,30 @@ class BoundaryDoULoss(nn.Module):
         intersect = torch.sum(score * target)
         y_sum = torch.sum(target * target)
         z_sum = torch.sum(score * score)
-        alpha = min(alpha, 0.8)  ## We recommend using a truncated alpha of 0.8, as using truncation gives better results on some datasets and has rarely effect on others.
-        loss = (z_sum + y_sum - 2 * intersect + smooth) / (z_sum + y_sum - (1 + alpha) * intersect + smooth)
+        alpha = min(
+            alpha, 0.8
+        )  ## We recommend using a truncated alpha of 0.8, as using truncation gives better results on some datasets and has rarely effect on others.
+        loss = (z_sum + y_sum - 2 * intersect + smooth) / (
+            z_sum + y_sum - (1 + alpha) * intersect + smooth
+        )
 
         return loss
 
     def forward(self, inputs, target):
-            inputs = torch.softmax(inputs, dim=1)
-            target = self._one_hot_encoder(target)
+        inputs = torch.softmax(inputs, dim=1)
+        target = self._one_hot_encoder(target)
 
-            assert inputs.size() == target.size(), 'predict {} & target {} shape do not match'.format(inputs.size(),
-                                                                                                      target.size())
+        assert (
+            inputs.size() == target.size()
+        ), "predict {} & target {} shape do not match".format(
+            inputs.size(), target.size()
+        )
 
-            loss = 0.0
-            for i in range(0, self.n_classes):
-                loss += self._adaptive_size(inputs[:, i], target[:, i])
-            return loss / self.n_classes
+        loss = 0.0
+        for i in range(0, self.n_classes):
+            loss += self._adaptive_size(inputs[:, i], target[:, i])
+        return loss / self.n_classes
+
 
 class JaccardLoss(nn.Module):
     def __init__(self, ignore_index=255, smooth=1.0):
@@ -148,20 +174,35 @@ class JaccardLoss(nn.Module):
         losses = torch.stack(losses)
         loss = losses.mean()
         return loss
-def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_save_path=None, case=None, z_spacing=1):
-    image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
-    
+
+
+def test_single_volume(
+    image,
+    label,
+    net,
+    classes,
+    patch_size=[256, 256],
+    test_save_path=None,
+    case=None,
+    z_spacing=1,
+):
+    image, label = (
+        image.squeeze(0).cpu().detach().numpy(),
+        label.squeeze(0).cpu().detach().numpy(),
+    )
+
     if len(image.shape) == 3:
         prediction = np.zeros_like(label)
         for ind in range(image.shape[0]):
             slice = image[ind, :, :]
             x, y = slice.shape[0], slice.shape[1]
             if x != patch_size[0] or y != patch_size[1]:
-                slice = zoom(slice, (patch_size[0] / x, patch_size[1] / y), order=3)  # previous using 0
-            x_transforms = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize([0.5], [0.5])
-            ])
+                slice = zoom(
+                    slice, (patch_size[0] / x, patch_size[1] / y), order=3
+                )  # previous using 0
+            x_transforms = transforms.Compose(
+                [transforms.ToTensor(), transforms.Normalize([0.5], [0.5])]
+            )
             input = x_transforms(slice).unsqueeze(0).float().cuda()
             with torch.no_grad():
                 outputs = net(input)
@@ -172,10 +213,14 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_s
                     pred = zoom(out, (x / patch_size[0], y / patch_size[1]), order=0)
                 else:
                     pred = out
-                prediction[ind] = pred
+
+                # handle isic case
+                try:
+                    prediction[ind] = pred
+                except:
+                    pass
     else:
-        input = torch.from_numpy(image).unsqueeze(
-            0).unsqueeze(0).float().cuda()
+        input = torch.from_numpy(image).unsqueeze(0).unsqueeze(0).float().cuda()
         net.eval()
         with torch.no_grad():
             out = torch.argmax(torch.softmax(net(input), dim=1), dim=1).squeeze(0)
@@ -191,56 +236,60 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256], test_s
         img_itk.SetSpacing((1, 1, z_spacing))
         prd_itk.SetSpacing((1, 1, z_spacing))
         lab_itk.SetSpacing((1, 1, z_spacing))
-        sitk.WriteImage(prd_itk, test_save_path + '/'+case + "_pred.nii.gz")
-        sitk.WriteImage(img_itk, test_save_path + '/'+ case + "_img.nii.gz")
-        sitk.WriteImage(lab_itk, test_save_path + '/'+ case + "_gt.nii.gz")
+        sitk.WriteImage(prd_itk, test_save_path + "/" + case + "_pred.nii.gz")
+        sitk.WriteImage(img_itk, test_save_path + "/" + case + "_img.nii.gz")
+        sitk.WriteImage(lab_itk, test_save_path + "/" + case + "_gt.nii.gz")
     return metric_list
 
-# Written By Sina 
+
+# Written By Sina
 class AddNoise(object):
-    def __init__(self, noise_type='none', **kwargs):
+    def __init__(self, noise_type="none", **kwargs):
         self.noise_type = noise_type
         self.params = kwargs
-    
+
     def set_params(self, **kwargs):
         self.params = kwargs
 
     def __call__(self, sample):
-        if self.noise_type == 'salt_pepper':
+        if self.noise_type == "salt_pepper":
             return self.add_salt_pepper_noise(sample)
-        elif self.noise_type == 'gaussian':
+        elif self.noise_type == "gaussian":
             return self.add_gaussian_noise(sample)
-        elif self.noise_type == 'poisson':
+        elif self.noise_type == "poisson":
             return self.add_poisson_noise(sample)
-        elif self.noise_type == 'speckle':
+        elif self.noise_type == "speckle":
             return self.add_speckle_noise(sample)
         else:
             return sample
-    
+
     def add_salt_pepper_noise(self, sample):
-        salt_prob = self.params.get('salt_prob', 0.05)
-        pepper_prob = self.params.get('pepper_prob', 0.05)
+        salt_prob = self.params.get("salt_prob", 0.05)
+        pepper_prob = self.params.get("pepper_prob", 0.05)
         salt_mask = torch.rand(sample.shape) < salt_prob
         pepper_mask = torch.rand(sample.shape) < pepper_prob
         noisy_sample = sample.clone()
         noisy_sample[salt_mask] = 1
         noisy_sample[pepper_mask] = 0
         return noisy_sample
-    
+
     def add_gaussian_noise(self, sample):
-        mean = self.params.get('mean', 0)
-        std = self.params.get('std', 0.1)
+        mean = self.params.get("mean", 0)
+        std = self.params.get("std", 0.1)
         noisy_sample = sample + torch.randn_like(sample) * std + mean
         return noisy_sample
-    
+
     def add_poisson_noise(self, sample):
         sample = sample.float()
-        vals = 2 ** torch.ceil(torch.log2(torch.tensor([len(torch.unique(sample))]))).item()
+        vals = (
+            2
+            ** torch.ceil(torch.log2(torch.tensor([len(torch.unique(sample))]))).item()
+        )
         noisy_sample = torch.poisson(sample * vals) / vals
         return noisy_sample
-    
+
     def add_speckle_noise(self, sample):
-        std = self.params.get('std', 0.1)
+        std = self.params.get("std", 0.1)
         gaussian_noise = torch.randn_like(sample) * std
         noisy_sample = sample + sample * gaussian_noise
         return noisy_sample
