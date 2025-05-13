@@ -189,7 +189,10 @@ def trainer_synapse(args, model, snapshot_path):
     acc_loss_jc = 0.0
 
     for epoch_num in iterator:
-        for i_batch, sampled_batch in enumerate(trainloader):
+        train_bar = tqdm(
+            trainloader, desc=f"Epoch {epoch_num+1}/{max_epoch}", unit="batch"
+        )
+        for i_batch, sampled_batch in enumerate(train_bar):
             image_batch, label_batch = sampled_batch["image"], sampled_batch["label"]
             # print("data shape---------", image_batch.shape, label_batch.shape)
             image_batch, label_batch = image_batch.cuda(), label_batch.squeeze(1).cuda()
@@ -227,6 +230,9 @@ def trainer_synapse(args, model, snapshot_path):
             # acc_loss_ce += loss_ce.item()
             acc_loss_bo += loss2.item()
             # acc_loss_jc += loss3.item()
+
+            # Update tqdm progress bar description with current loss
+            train_bar.set_postfix(boundary_loss=f"{loss2.item():.4f}", lr=f"{lr_:.6f}")
 
             if iter_num % 100 == 0:
                 # acc_loss = acc_loss / 100
@@ -391,7 +397,10 @@ def trainer_isic(args, model, snapshot_path):
     acc_loss_jc = 0.0
 
     for epoch_num in iterator:
-        for i_batch, sampled_batch in enumerate(trainloader):
+        train_bar = tqdm(
+            trainloader, desc=f"Epoch {epoch_num+1}/{max_epoch}", unit="batch"
+        )
+        for i_batch, sampled_batch in enumerate(train_bar):
             image_batch, label_batch = sampled_batch["image"], sampled_batch["label"]
             # print("data shape---------", image_batch.shape, label_batch.shape)
             image_batch, label_batch = image_batch.cuda(), label_batch.squeeze(1).cuda()
@@ -429,6 +438,9 @@ def trainer_isic(args, model, snapshot_path):
             # acc_loss_ce += loss_ce.item()
             acc_loss_bo += loss2.item()
             # acc_loss_jc += loss3.item()
+
+            # Update tqdm progress bar description with current loss
+            train_bar.set_postfix(boundary_loss=f"{loss2.item():.4f}", lr=f"{lr_:.6f}")
 
             if iter_num % 100 == 0:
                 # acc_loss = acc_loss / 100
