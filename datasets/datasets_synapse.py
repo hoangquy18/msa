@@ -10,16 +10,14 @@ import imgaug as ia
 import imgaug.augmenters as iaa
 
 
-def mask_to_onehot(
-    mask,
-):
+def mask_to_onehot(mask, num_classes):
     """
     Converts a segmentation mask (H, W, C) to (H, W, K) where the last dim is a one
     hot encoding vector, C is usually 1 or 3, and K is the number of class.
     """
     semantic_map = []
     mask = np.expand_dims(mask, -1)
-    for colour in range(9):
+    for colour in range(num_classes):
         equality = np.equal(mask, colour)
         class_map = np.all(equality, axis=-1)
         semantic_map.append(class_map)
@@ -27,8 +25,8 @@ def mask_to_onehot(
     return semantic_map
 
 
-def augment_seg(img_aug, img, seg):
-    seg = mask_to_onehot(seg)
+def augment_seg(img_aug, img, seg, num_classes=9):
+    seg = mask_to_onehot(seg, num_classes)
     aug_det = img_aug.to_deterministic()
     image_aug = aug_det.augment_image(img)
 
@@ -124,7 +122,7 @@ class Synapse_dataset(Dataset):
             data_path = os.path.join(self.data_dir, slice_name + ".npz")
             data = np.load(data_path)
             image, label = data["image"], data["label"]
-            image, label = augment_seg(self.img_aug, image, label)
+            image, label = augment_seg(self.img_aug, image, label, 9)
             x, y = image.shape
             if x != self.img_size or y != self.img_size:
                 image = zoom(
@@ -232,7 +230,7 @@ class ISIC_dataset(Dataset):
 
         # Apply augmentations for training
         if self.split == "train" and self.img_aug is not None:
-            image, label = augment_seg(self.img_aug, image, label)
+            image, label = augment_seg(self.img_aug, image, label, 2)
 
         # Resize if needed
         if image.shape[0] != self.img_size or image.shape[1] != self.img_size:
