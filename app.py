@@ -54,7 +54,6 @@ if "ct" not in st.session_state:
 
 def main():
     st.title("Medical Image Segmentation Demo")
-    st.markdown("Upload an image to segment organs using deep learning models")
 
     with st.sidebar:
         st.header("Segmentation Method")
@@ -101,11 +100,6 @@ def main():
                     # Process the image
                     out = np.expand_dims(out, axis=0)
                     image = np.expand_dims(image, axis=0)
-
-                    # if out.shape[1] != 224 or out.shape[2] != 224:
-                    #     out = zoom(
-                    #         out, (1, 224 / out.shape[1], 224 / out.shape[2], 0), order=0
-                    #     )
 
                     with col2:
                         st.subheader(f"Segmentation Result ({segmentation_method})")
